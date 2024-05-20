@@ -1,15 +1,16 @@
 
-#define ALPHA 1
-#define BETA 1
-#define GAMMA 1
+#define ALPHA 1.5
+#define BETA 2
+#define GAMMA 1.7
 #define k 1
-#define c 1
-#define r 1
-#define VELOCITY_UPPER_BOUND -1
-#define VELOCITY_LOWER_BOUND  1
-#define POSITION_UPPER_BOUND -10
-#define POSITION_LOWER_BOUND  10
-
+#define c 0.01
+#define r 0.05
+#define VELOCITY_UPPER_BOUND   10
+#define VELOCITY_LOWER_BOUND  -10
+#define POSITION_UPPER_BOUND   20
+#define POSITION_LOWER_BOUND  -20
+#define LOUDNESS_CONSTANT 0.9
+#define PULSE_RATE_CONSTANT 1.1
 using namespace std;
 
    auto now = chrono::high_resolution_clock::now();
@@ -42,13 +43,14 @@ struct Bat{
     float fitness;
     float personal_best_fitness;
     float personal_best_position;
-
+    float initial_pulse_rate;
     Bat(){
         position = getRandomNumber(-10,10);
         velocity = getRandomNumber(-1,1);
         frequency = getRandomNumber(0,1);
         loudness = 2;
         pulse_rate = 0.1;
+        initial_pulse_rate = pulse_rate;
     }
 
     void evaluateFitness(){
