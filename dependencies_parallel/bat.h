@@ -13,13 +13,11 @@
 #define LOUDNESS_CONSTANT 0.95
 #define PULSE_RATE_CONSTANT 0.1
 using namespace std;
-
-__device__ unsigned int getRandomNumber(unsigned int &seed) {
-    const unsigned int a = 1664525;
-    const unsigned int b = 1013904223;
-    seed = a * seed + b;
-    return seed & 0x7FFFFFFF;
-}
+template<typename T>
+__global__
+void setValueRandomly(float lower_limit, float upper_limit, T &valuetoBeSet,curandState *state){
+        valuetoBeSet = (T)curand_uniform(state) * upper_limit - lower_limit;
+    }
 
 struct Bat{
     float position;
@@ -28,18 +26,19 @@ struct Bat{
     float pulse_rate;
     float loudness;
     float fitness;
-    float personal_best_fitness;
-    float personal_best_position;
+    float personal_best_fitness=-FLT_MIN;
+    float personal_best_position=-FLT_MIN;
     float initial_pulse_rate;
-    __device__ void initialize(unsigned long long seed){
+    __device__ void initialize(curandState *state){
+
          int id = threadIdx.x + blockIdx.x * blockDim.x;
-                unsigned int localSeed =  seed + id;  // Different seed for each thread
-        position = (getRandomNumber(localSeed) % 20000) / 1000.0f - 10.0f;
-        velocity = (getRandomNumber(localSeed) % 2000) / 1000.0f - 1.0f;
-        frequency =  (getRandomNumber(localSeed) % 1000) / 1000.0f;  
+        setValueRandomly(-20,20,position,state);
+        setValueRandomly(-1,1,velocity,state);
+        setValueRandomly(0.00001,1,frequency,state);
         loudness = 2;
         pulse_rate = 0.2;
         initial_pulse_rate = pulse_rate;
+        evaluateFitness();
     }
 
     __device__ void evaluateFitness(){

@@ -1,6 +1,13 @@
 {
     "files.associations": {
         "random": "cpp",
-        "chrono": "cpp"
+        "chrono": "cpp",
+        "ostream": "cpp",
+        "algorithm": "cpp",
+        "istream": "cpp",
+        "limits": "cpp",
+        "xlocale": "cpp",
+        "xmemory0": "cpp",
+        "xutility": "cpp"
     }
 }
