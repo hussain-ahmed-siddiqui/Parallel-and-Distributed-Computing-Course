@@ -53,7 +53,7 @@ __device__ void updateBatLoudness(float &current_l){
     current_l *= LOUDNESS_CONSTANT;
 }
 
-__device__ volatile bool stopFlag = false;
+// __device__ volatile bool stopFlag = false;
 __device__ void performWork(Bat *bat,float global_best_position,curandState *state){
     
     updateBatFrequency(bat->frequency,state);
@@ -66,10 +66,12 @@ __device__ void performWork(Bat *bat,float global_best_position,curandState *sta
 
 
 __device__ int avg_personal_best_position_improv_counter=0;
-__device__ void ApplyStoppingCriteria(float &prev_avg, float new_avg){
+__device__ void ApplyStoppingCriteria(float &prev_avg, float new_avg,volatile bool &stopFlag){
     avg_personal_best_position_improv_counter++;
     if(fabs(new_avg) > fabs(prev_avg)){avg_personal_best_position_improv_counter=0;}
     if(avg_personal_best_position_improv_counter > 5) stopFlag = true;
+        __threadfence();  // Ensure the write to 'flag' is visible to all threads across the device
+
     
 }
 
@@ -99,13 +101,18 @@ __device__ void setGlobalandAverage(Bat *batSwarm, int N, float& global_best_fit
     average_best_position_of_batSwarm = sum/(float)N;
     }
 
-__device__ void syncThreads() {
-    __syncthreads();  // Encapsulate synchronization in a device function for clarity
-}
+
+// __device__ void updateControlFlag() {
+//     stopFlag = true;
+//     __threadfence();  // Ensure the write to 'flag' is visible to all threads across the device
+//     // Optionally follow with an atomic operation if needed to further signal or manage control
+// }
+
 __device__ void startAlgo(Bat *bats, int N, unsigned long long seed){
     __shared__ float global_best_fitness;
     __shared__ float average_best_position_of_batSwarm;
     __shared__ float global_best_position;
+    __shared__ volatile bool stopFlag;
     curandState *state = new curandState;  // Should ideally be per-thread and persistent, not recreated in a loop
 
     // Initialize random states once per thread
@@ -113,28 +120,24 @@ __device__ void startAlgo(Bat *bats, int N, unsigned long long seed){
     if (idx < N) {
         curand_init(seed, idx, 0, state); 
     }
+    setGlobalandAverage(bats, N, global_best_fitness, global_best_position, average_best_position_of_batSwarm);        
 
-    __syncthreads();  // Ensure all states are initialized
-
-    if(threadIdx.x == 0){
-            setGlobalandAverage(bats, N, global_best_fitness, global_best_position, average_best_position_of_batSwarm);        
-        while(true){
-            printf("Average personal best position: %f\n",average_best_position_of_batSwarm);
-            float prev_avg = average_best_position_of_batSwarm;
-            syncThreads();
-            CalculateFitnessAverage(bats, N, average_best_position_of_batSwarm);
-            ApplyStoppingCriteria(prev_avg, average_best_position_of_batSwarm);
-            if(stopFlag) break;  // Exit loop if stop condition is met
-        }
-    } else {
-        while(!stopFlag){  // Ensure this check is dynamic
-            for(int i = threadIdx.x; i < N; i += blockDim.x * gridDim.x){  // Distribute work more evenly
-                performWork(&bats[i], global_best_position, state);
-                        printf("id: %d, v: %f, p: %f, f: %f, l: %f, pr: %f, fit: %f, pbfit: %f, pbp: %f\n",i,bats[i].velocity,bats[i].position,bats[i].frequency,bats[i].loudness,bats[i].pulse_rate,bats[i].fitness,bats[i].personal_best_fitness,bats[i].personal_best_position);
-
+    while(!stopFlag){
+        int stride =  (blockDim.x-1) * gridDim.x;
+        for(int i= threadIdx.x + blockDim.x * blockIdx.x;i<N;i+=stride){
+            if(threadIdx.x!=4) {performWork(&bats[i],global_best_position,state);
+            printf("this is thread: %d and i= %d\t",threadIdx.x,i);
             }
-            syncThreads();  // Sync all threads to recheck the stopping flag
+
+            __syncthreads();
         }
+        if(threadIdx.x==0){
+            float prev_avg = average_best_position_of_batSwarm;
+            CalculateFitnessAverage(bats, N, average_best_position_of_batSwarm);
+            ApplyStoppingCriteria(prev_avg, average_best_position_of_batSwarm,stopFlag);
+        }
+            printf("\n");
+
     }
 
     delete state;  // Clean up the state
@@ -142,27 +145,28 @@ __device__ void startAlgo(Bat *bats, int N, unsigned long long seed){
 
 
 __global__ void launchGpuKernel(Bat *bats,int N, float seed){
-    init(bats,N,seed);
-
-    for(int i=0;i<N && threadIdx.x == 0;i++){
-        // printf("id: %d, v: %f, p: %f, f: %f, l: %f, pr: %f, fit: %f, pbfit: %f, pbp: %f\n",i,bats[i].velocity,bats[i].position,bats[i].frequency,bats[i].loudness,bats[i].pulse_rate,bats[i].fitness,bats[i].personal_best_fitness,bats[i].personal_best_position);
-    }
+    if(threadIdx.x==0) init(bats,N,seed);
+    __syncthreads();
+    
     startAlgo(bats,N,seed);
 }
 
 
 int main(){
     
-    const size_t num_of_blocks=1,threads_per_block=4,N=100;
+    const size_t num_of_blocks=1,threads_per_block=5,N=100;
     
     Bat* bats;
     cudaMalloc(&bats, N * sizeof(Bat));    
     unsigned long long seed = time(NULL);  // Using time as seed for demonstration
-
+    auto start = chrono::high_resolution_clock::now();
     launchGpuKernel<<<num_of_blocks,threads_per_block>>>(bats,N,seed);
 
     cudaDeviceSynchronize();
-
+    auto stop = chrono::high_resolution_clock::now();
+    auto duration = chrono::duration_cast<chrono::nanoseconds>(stop - start);
+    std::cout << "Time taken by sequential function: " 
+              << duration.count() << " nanoseconds" << std::endl;
 
     cudaFree(bats);
     return 0;
