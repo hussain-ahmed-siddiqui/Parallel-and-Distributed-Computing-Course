@@ -1,7 +1,7 @@
 #include"dependencies/libs.h"
 #include"dependencies/bat.h"
 
-float global_best_fitness=-FLT_MIN;
+float global_best_fitness=-FLT_MAX;
 float average_best_position_of_batSwarm;
 float global_best_position=-FLT_MIN;
 void updateBatFrequency(float &freq){
@@ -15,12 +15,12 @@ void updateBatVelocity(float &current_v, float &current_p, float &freq, float lo
     current_v = current_v + (current_p - global_best_position) * freq;
     if(current_v > upper_limit) current_v = upper_limit;
     else if(current_v < lower_limit) current_v = lower_limit;
+    max(1.0,2.4);
 }
 
 void updateBatPulseRate(float &current_pr, float &initial_pr){
     current_pr = initial_pr* (1 - exp(-PULSE_RATE_CONSTANT * GAMMA));
 }
-
 void updateBatPosition(float &current_p, float &new_v, float &current_pr,float &initial_pr, float lower_limit, float upper_limit){
     float prev_pr = current_pr;
     updateBatPulseRate(current_pr, initial_pr);

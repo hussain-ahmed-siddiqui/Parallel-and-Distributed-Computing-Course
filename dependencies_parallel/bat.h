@@ -14,8 +14,8 @@
 #define PULSE_RATE_CONSTANT 0.1
 using namespace std;
 template<typename T>
-__global__
-void setValueRandomly(float lower_limit, float upper_limit, T &valuetoBeSet,curandState *state){
+__device__ void setValueRandomly(float lower_limit, float upper_limit, T &valuetoBeSet,curandState *state){
+    if(lower_limit < 0) lower_limit = fabs(lower_limit);
         valuetoBeSet = (T)curand_uniform(state) * upper_limit - lower_limit;
     }
 
@@ -26,18 +26,19 @@ struct Bat{
     float pulse_rate;
     float loudness;
     float fitness;
-    float personal_best_fitness=-FLT_MIN;
-    float personal_best_position=-FLT_MIN;
+    float personal_best_fitness;
+    float personal_best_position;
     float initial_pulse_rate;
     __device__ void initialize(curandState *state){
 
-         int id = threadIdx.x + blockIdx.x * blockDim.x;
         setValueRandomly(-20,20,position,state);
         setValueRandomly(-1,1,velocity,state);
         setValueRandomly(0.00001,1,frequency,state);
         loudness = 2;
         pulse_rate = 0.2;
         initial_pulse_rate = pulse_rate;
+        personal_best_fitness=-FLT_MAX;
+        personal_best_position=position;
         evaluateFitness();
     }
 
