@@ -98,11 +98,12 @@ void startAlgo(vector<Bat> bats){
 
 int main(){
     auto start = chrono::high_resolution_clock::now();
-    vector<Bat> bats(10000);
-    auto stop = chrono::high_resolution_clock::now();
+    vector<Bat> bats(1000);
+   
+    startAlgo(bats);
+     auto stop = chrono::high_resolution_clock::now();
     auto duration = chrono::duration_cast<chrono::nanoseconds>(stop - start);
     std::cout << "Time taken by sequential function: " 
               << duration.count() << " nanoseconds" << std::endl;
-    startAlgo(bats);
     return 0;
 }

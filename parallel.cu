@@ -52,16 +52,33 @@ __device__ void updateBatPosition(float &current_p, float &new_v, float &current
 __device__ void updateBatLoudness(float &current_l){
     current_l *= LOUDNESS_CONSTANT;
 }
+__device__ void updateGlobalBest(float candidateFitness, float candidatePosition, float* globalBestFitness, float* globalBestPosition) {
+    int* addr_as_int = (int*)globalBestFitness;
+    int old = *addr_as_int;
+    int assumed;
 
+    do {
+        assumed = old;
+        if (__int_as_float(assumed) >= candidateFitness) return;  // No update needed if current is better or equal
+
+        old = atomicCAS(addr_as_int, assumed, __float_as_int(candidateFitness));
+    } while (assumed != old);
+
+    // Now update the position safely
+    if (old == assumed) {  // Check if the fitness was indeed updated
+        *globalBestPosition = candidatePosition;
+    }
+}
 // __device__ volatile bool stopFlag = false;
-__device__ void performWork(Bat *bat,float global_best_position,curandState *state){
+__device__ void performWork(Bat *bat,float *global_best_position,curandState *state, float* globalBestFitness ){
     
     updateBatFrequency(bat->frequency,state);
-    updateBatVelocity(bat->velocity,bat->position,bat->frequency,global_best_position,VELOCITY_LOWER_BOUND,VELOCITY_UPPER_BOUND);
-    updateBatPosition(bat->position,bat->velocity,bat->pulse_rate,bat->initial_pulse_rate,global_best_position,POSITION_LOWER_BOUND,POSITION_UPPER_BOUND);
+    updateBatVelocity(bat->velocity,bat->position,bat->frequency,*global_best_position,VELOCITY_LOWER_BOUND,VELOCITY_UPPER_BOUND);
+    updateBatPosition(bat->position,bat->velocity,bat->pulse_rate,bat->initial_pulse_rate,*global_best_position,POSITION_LOWER_BOUND,POSITION_UPPER_BOUND);
     updateBatLoudness(bat->loudness);
     updateBatPulseRate(bat->pulse_rate,bat->initial_pulse_rate);
     bat->evaluateFitness();
+    updateGlobalBest(bat->fitness,bat->personal_best_position,globalBestFitness,global_best_position);
 }
 
 
@@ -125,8 +142,8 @@ __device__ void startAlgo(Bat *bats, int N, unsigned long long seed){
     while(!stopFlag){
         int stride =  (blockDim.x-1) * gridDim.x;
         for(int i= threadIdx.x + blockDim.x * blockIdx.x;i<N;i+=stride){
-            if(threadIdx.x!=4) {performWork(&bats[i],global_best_position,state);
-            printf("this is thread: %d and i= %d\t",threadIdx.x,i);
+            if(threadIdx.x!=4) {performWork(&bats[i],&global_best_position,state,&global_best_fitness);
+            // printf("this is thread: %d and i= %d\t",threadIdx.x,i);
             }
 
             __syncthreads();
@@ -136,7 +153,6 @@ __device__ void startAlgo(Bat *bats, int N, unsigned long long seed){
             CalculateFitnessAverage(bats, N, average_best_position_of_batSwarm);
             ApplyStoppingCriteria(prev_avg, average_best_position_of_batSwarm,stopFlag);
         }
-            printf("\n");
 
     }
 
@@ -154,7 +170,7 @@ __global__ void launchGpuKernel(Bat *bats,int N, float seed){
 
 int main(){
     
-    const size_t num_of_blocks=1,threads_per_block=5,N=100;
+    const size_t num_of_blocks=1,threads_per_block=3,N=1000;
     
     Bat* bats;
     cudaMalloc(&bats, N * sizeof(Bat));    
