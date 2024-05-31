@@ -11,7 +11,7 @@ void init(Bat *bats,int N,float seed){
     curand_init(seed, i, 0, state); 
 
     bats[i].initialize(state);
-        printf("p:%f, v:%f, l:%f, fit:%f\n",bats[i].personal_best_position,bats[i].velocity,bats[i].loudness,bats[i].personal_best_fitness);
+
 }
     delete state;  // Clean up state
 
@@ -140,15 +140,15 @@ __device__ void startAlgo(Bat *bats, int N, unsigned long long seed){
     setGlobalandAverage(bats, N, global_best_fitness, global_best_position, average_best_position_of_batSwarm);        
 
     while(!stopFlag){
-        int stride =  (blockDim.x-32) * gridDim.x;
-        for(int i= threadIdx.x + (blockDim.x-32) * blockIdx.x;i<N;i+=stride){
-            if(threadIdx.x!=0 && threadIdx.x >= 32) {performWork(&bats[i],&global_best_position,state,&global_best_fitness);
+        int stride =  (blockDim.x-1) * gridDim.x;
+        for(int i= threadIdx.x + blockDim.x * blockIdx.x;i<N;i+=stride){
+            if(threadIdx.x!=4) {performWork(&bats[i],&global_best_position,state,&global_best_fitness);
             // printf("this is thread: %d and i= %d\t",threadIdx.x,i);
             }
 
             __syncthreads();
         }
-        if(threadIdx.x<32){
+        if(threadIdx.x==0){
             float prev_avg = average_best_position_of_batSwarm;
             CalculateFitnessAverage(bats, N, average_best_position_of_batSwarm);
             ApplyStoppingCriteria(prev_avg, average_best_position_of_batSwarm,stopFlag);
@@ -170,10 +170,10 @@ __global__ void launchGpuKernel(Bat *bats,int N, float seed){
 
 int main(){
     
-    const size_t num_of_blocks=1,threads_per_block=64,N=1000;
+    const size_t num_of_blocks=1,threads_per_block=3,N=1000;
     
     Bat* bats;
-    cudaMallocManaged(&bats, N * sizeof(Bat));    
+    cudaMalloc(&bats, N * sizeof(Bat));    
     unsigned long long seed = time(NULL);  // Using time as seed for demonstration
     auto start = chrono::high_resolution_clock::now();
     launchGpuKernel<<<num_of_blocks,threads_per_block>>>(bats,N,seed);
@@ -183,9 +183,7 @@ int main(){
     auto duration = chrono::duration_cast<chrono::nanoseconds>(stop - start);
     std::cout << "Time taken by sequential function: " 
               << duration.count() << " nanoseconds" << std::endl;
-    for(int i=0;i<N;i++){
-        printf("p:%f, v:%f, l:%f, fit:%f\n",bats[i].personal_best_position,bats[i].velocity,bats[i].loudness,bats[i].personal_best_fitness);
-    }
+
     cudaFree(bats);
     return 0;
 }
